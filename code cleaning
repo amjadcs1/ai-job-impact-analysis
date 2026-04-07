@@ -1,0 +1,154 @@
+import pandas as pd
+import numpy as np
+import re
+
+# -----------------------------------------------
+# 1. تحميل الملفين (افترض أن الأسماء كما هي)
+# -----------------------------------------------
+# تأكد من تغيير المسار إلى موقع الملفات لديك
+df1 = pd.read_excel('لقطة شاشة 2026-04-03 142231.png.xlsx')  # أو csv
+df2 = pd.read_excel('لقطة شاشة 2026-04-03 142500.png.xlsx')
+
+# -----------------------------------------------
+# 2. دالة عامة لتنظيف أسماء الأعمدة
+# -----------------------------------------------
+def clean_columns(df):
+    """يزيل المسافات، يحول إلى lowercase، يستبدل المسافات بـ _"""
+    df.columns = df.columns.astype(str).str.strip().str.lower()
+    df.columns = df.columns.str.replace(r'\s+', '_', regex=True)
+    df.columns = df.columns.str.replace(r'[^\w]', '_', regex=True)
+    return df
+
+# -----------------------------------------------
+# 3. دالة لتنظيف القيم النصية (إزالة أحرف خاصة)
+# -----------------------------------------------
+def clean_text_values(df, columns=None):
+    """ينظف الأعمدة النصية من الرموز الغريبة والمسافات"""
+    if columns is None:
+        columns = df.select_dtypes(include=['object']).columns
+    for col in columns:
+        df[col] = df[col].astype(str).str.strip()
+        df[col] = df[col].str.replace(r'[^\w\s]', '', regex=True)
+        df[col] = df[col].replace('nan', np.nan)
+        df[col] = df[col].replace('None', np.nan)
+    return df
+
+# -----------------------------------------------
+# 4. دالة لتحويل الأعمدة الرقمية الخاطئة (مثل "-3.98" أو "01.07")
+# -----------------------------------------------
+def fix_numeric_columns(df, columns):
+    """يحول الأعمدة النصية التي تحتوي أرقامًا إلى float/int"""
+    for col in columns:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.replace(',', '.')
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    return df
+
+# -----------------------------------------------
+# 5. تنظيف الملف الأول (الجدول الكبير)
+# -----------------------------------------------
+print("تنظيف الملف الأول...")
+df1 = clean_columns(df1)
+
+# إعادة تسمية بعض الأعمدة يدويًا (حسب ما يظهر في الصورة)
+df1.rename(columns={
+    'industry_a': 'industry_stage',
+    'ibo_description': 'job_level',
+    'ai_job': 'is_ai_job',
+    'displia': 'displacement_risk',
+    'reskillina_rea': 'reskilling_need',
+    'automation': 'automation_score',
+    'sand': 'matching_score',
+    'skills': 'skill_category',
+    'core_skills': 'core_skill_match',
+    'ai_intensity': 'ai_intensity_score',
+    'ai_keywords': 'ai_keyword_match',
+    'ai_mentioned': 'ai_mentioned_flag',
+    'seniority': 'seniority_level',
+    'level': 'experience_level',
+    'job': 'job_title',
+    'indusry': 'industry',
+    'size': 'company_size'
+}, inplace=True)
+
+# تحويل الأعمدة المنطقية (TRUE/FALSE) إلى boolean حقيقي
+bool_cols = ['is_ai_job', 'core_skill_match', 'ai_mentioned_flag']
+for col in bool_cols:
+    if col in df1.columns:
+        df1[col] = df1[col].astype(str).str.upper().isin(['TRUE', '1', 'YES'])
+
+# الأعمدة الرقمية في df1
+numeric_cols_df1 = ['displacement_risk', 'reskilling_need', 'automation_score',
+                    'salary', 'matching_score', 'ai_intensity_score']
+df1 = fix_numeric_columns(df1, numeric_cols_df1)
+
+# تنظيف النصوص
+df1 = clean_text_values(df1)
+
+# حذف الصفوف المكررة إن وجدت
+df1.drop_duplicates(inplace=True)
+
+# -----------------------------------------------
+# 6. تنظيف الملف الثاني (الجدول الثاني)
+# -----------------------------------------------
+print("تنظيف الملف الثاني...")
+df2 = clean_columns(df2)
+
+# إعادة تسمية الأعمدة لتكون واضحة
+df2.rename(columns={
+    'industry_xyz': 'industry',
+    'company_size': 'company_size',
+    'company_name': 'company_name',
+    'industry_ai_napoleon': 'industry_growth_stage',
+    'industry_ax_pitron': 'industry_sector',
+    'city': 'city',
+    'job_description': 'job_description_id',
+    'ai_job_desired_position': 'ai_job_flag',
+    'ai_job_placement': 'ai_placement_flag',
+    'skill_required': 'primary_skill',
+    'automation_nr_skill': 'automation_skill_score',
+    'ai_intensity_score': 'ai_intensity_score',
+    'salary_chg_y_score': 'salary_change_percent',
+    'salary_under_avg_vs': 'salary_under_avg',
+    'policy_enabled': 'policy_support',
+    'location_id': 'location_id',
+    'industry_id': 'industry_id',
+    'company_id': 'company_id',
+    'posting_year': 'year',
+    'job_id': 'job_id'
+}, inplace=True)
+
+# تحويل الأعمدة المنطقية
+bool_cols_df2 = ['ai_job_flag', 'ai_placement_flag', 'policy_support']
+for col in bool_cols_df2:
+    if col in df2.columns:
+        df2[col] = df2[col].astype(str).str.upper().isin(['TRUE', '1', 'YES'])
+
+# الأعمدة الرقمية في df2 (ملاحظة: بعضها يحتوي فواصل عشرية بفاصلة أوروبية)
+numeric_cols_df2 = ['automation_skill_score', 'ai_intensity_score', 'salary_change_percent', 'salary_under_avg']
+df2 = fix_numeric_columns(df2, numeric_cols_df2)
+
+# تنظيف النصوص
+df2 = clean_text_values(df2)
+
+# تحويل عمود السنة إلى عدد صحيح
+if 'year' in df2.columns:
+    df2['year'] = pd.to_numeric(df2['year'], errors='coerce').astype('Int64')
+
+# حذف المكررات
+df2.drop_duplicates(inplace=True)
+
+# -----------------------------------------------
+# 7. حفظ النتائج النظيفة
+# -----------------------------------------------
+df1.to_excel('cleaned_file1.xlsx', index=False)
+df2.to_excel('cleaned_file2.xlsx', index=False)
+
+print("✅ تم التنظيف بنجاح وحفظ الملفين النظيفين.")
+
+# عرض عينة صغيرة للتأكد
+print("\n--- عينة من الملف الأول بعد التنظيف ---")
+print(df1.head(3).to_string())
+
+print("\n--- عينة من الملف الثاني بعد التنظيف ---")
+print(df2.head(3).to_string())
